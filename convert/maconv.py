@@ -1,3 +1,21 @@
+#!/usr/bin/env python3
+#
+# Copyright (C) 2012-2016 Matthias Klumpp <matthias@tenstral.net>
+#
+# Licensed under the GNU Lesser General Public License Version 3
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the license, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
 import json
@@ -92,6 +110,7 @@ def create_neuroscope_channel_data(result):
 
     return ElementTree(parameters)
 
+
 def create_neuroscope_settings_data(result, pos_fname):
     '''
     Creates the XML for NeuroScope (display) settings.
@@ -106,10 +125,11 @@ def create_neuroscope_settings_data(result, pos_fname):
     settings.set('version', '2.0.0')
 
     # position file
-    nFiles = SubElement(settings, 'files')
-    nFile = SubElement(nFiles, 'file')
-    SubElement(nFile, 'type').text = '3'
-    SubElement(nFile, 'url').text = pos_fname
+    if pos_fname:
+        nFiles = SubElement(settings, 'files')
+        nFile = SubElement(nFiles, 'file')
+        SubElement(nFile, 'type').text = '3'
+        SubElement(nFile, 'url').text = pos_fname
 
     displays = SubElement(settings, 'displays')
     display = SubElement(displays, 'display')
@@ -129,17 +149,22 @@ def create_neuroscope_settings_data(result, pos_fname):
 
     return ElementTree(settings)
 
-def save_neuroscope_metadata(dat_fname, rhd_result, pos_fname, no_settings_override):
+
+def save_neuroscope_metadata(dat_fname, rhd_result, pos_fname, override_settings = True):
     nsx_fname = os.path.splitext(dat_fname)[0] + ".xml"
     xml_tree = create_neuroscope_channel_data(rhd_result)
     xml_tree.write(nsx_fname, xml_declaration=True, short_empty_elements=False)
 
-    if not no_settings_override:
+    if override_settings:
         ns_fname = os.path.splitext(dat_fname)[0] + ".nrs"
         xml_tree = create_neuroscope_settings_data(rhd_result, pos_fname)
         xml_tree.write(ns_fname, xml_declaration=True, short_empty_elements=False)
 
+
 def convert_ma(root_path, subject, time, experiment, no_settings_override):
+    '''
+    Convert MazeAmaze data and directory so Nauroscope can read the data.
+    '''
 
     exp_root_path = os.path.join(root_path, subject, time, experiment)
     manifest_fname = os.path.join(exp_root_path, "manifest.json")
@@ -167,6 +192,24 @@ def convert_ma(root_path, subject, time, experiment, no_settings_override):
     if os.path.isfile(pos_input_fname):
         convert_positions(pos_input_fname, pos_fname, 20)
 
-    save_neuroscope_metadata(dat_fname, rhd_result, pos_fname, no_settings_override)
+    save_neuroscope_metadata(dat_fname, rhd_result, pos_fname, not no_settings_override)
 
     return output_dir
+
+
+def convert_rhd(rhd_file, output_dir, override):
+    '''
+    Convert a plain Intan RHD file into a .dat file and Neuroscope metadata.
+    '''
+
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
+
+    dat_fname = os.path.join(output_dir, "{}.dat".format(os.path.splitext(os.path.basename(rhd_file))[0]))
+    if os.path.isfile(dat_fname) and not override:
+        return dat_fname
+
+    rhd_result = rhd2dat(rhd_file, dat_fname)
+    save_neuroscope_metadata(dat_fname, rhd_result, None, override)
+
+    return dat_fname
